@@ -44,7 +44,9 @@ import {
   Calendar,
   Clock,
   MapPin,
-  LayoutTemplate
+  LayoutTemplate,
+  Briefcase,
+  UserCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
