@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { jobService, JobDescription } from '@/services/api';
@@ -27,6 +26,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { MultiSelect } from '@/components/ui/multi-select';
+
+// Define a list of common skills for the multi-select
+const SKILLS_OPTIONS = [
+  { value: 'JavaScript', label: 'JavaScript' },
+  { value: 'TypeScript', label: 'TypeScript' },
+  { value: 'React', label: 'React' },
+  { value: 'Python', label: 'Python' },
+  { value: 'Flask', label: 'Flask' },
+  { value: 'Node.js', label: 'Node.js' },
+  { value: 'HTML', label: 'HTML' },
+  { value: 'CSS', label: 'CSS' },
+  { value: 'SQL', label: 'SQL' },
+  { value: 'Git', label: 'Git' },
+];
 
 const JobDescriptions = () => {
   const [jobs, setJobs] = useState<JobDescription[]>([]);
@@ -42,6 +56,7 @@ const JobDescriptions = () => {
   const [company, setCompany] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
 
   useEffect(() => {
     fetchJobs();
@@ -70,6 +85,7 @@ const JobDescriptions = () => {
     setCompany('');
     setLocation('');
     setDescription('');
+    setSkills([]);
     setIsDialogOpen(true);
   };
 
@@ -79,6 +95,7 @@ const JobDescriptions = () => {
     setCompany(job.company);
     setLocation(job.location);
     setDescription(job.description);
+    setSkills(job.skills || []);
     setIsDialogOpen(true);
   };
 
@@ -95,6 +112,10 @@ const JobDescriptions = () => {
       await jobService.deleteJob(selectedJob.id);
       setJobs(jobs.filter(job => job.id !== selectedJob.id));
       setIsDeleteDialogOpen(false);
+      toast({
+        title: 'Job deleted successfully',
+        description: 'The job description has been removed.'
+      });
     } catch (error) {
       console.error('Error deleting job:', error);
       toast({
@@ -109,35 +130,43 @@ const JobDescriptions = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !company || !location || !description) {
+    
+    // Validate all required fields including skills
+    if (!title || !company || !location || !description || skills.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Validation Error',
-        description: 'Please fill in all fields.'
+        description: 'Please fill in all fields and select at least one skill.'
       });
       return;
     }
 
     try {
       setIsSubmitting(true);
+      const jobData = {
+        title,
+        company,
+        location,
+        description,
+        skills
+      };
+
       if (selectedJob) {
         // Update existing job
-        const updatedJob = await jobService.updateJob(selectedJob.id, {
-          title,
-          company,
-          location,
-          description
-        });
+        const updatedJob = await jobService.updateJob(selectedJob.id, jobData);
         setJobs(jobs.map(job => (job.id === selectedJob.id ? updatedJob : job)));
+        toast({
+          title: 'Job updated successfully',
+          description: 'The job description has been updated.'
+        });
       } else {
         // Create new job
-        const newJob = await jobService.createJob({
-          title,
-          company,
-          location,
-          description
-        });
+        const newJob = await jobService.createJob(jobData);
         setJobs([newJob, ...jobs]);
+        toast({
+          title: 'Job created successfully',
+          description: 'The new job description has been added.'
+        });
       }
       setIsDialogOpen(false);
     } catch (error) {
@@ -145,7 +174,7 @@ const JobDescriptions = () => {
       toast({
         variant: 'destructive',
         title: 'Error saving job description',
-        description: 'Please try again later.'
+        description: error instanceof Error ? error.message : 'Please try again later.'
       });
     } finally {
       setIsSubmitting(false);
@@ -203,18 +232,18 @@ const JobDescriptions = () => {
                 {job.description}
               </div>
               
-              {job.summary && (
+              {job.skills && job.skills.length > 0 && (
                 <div className="mt-3">
-                  <h4 className="text-sm font-medium mb-2">Key Requirements:</h4>
+                  <h4 className="text-sm font-medium mb-2">Required Skills:</h4>
                   <div className="flex flex-wrap gap-1">
-                    {job.summary.skills.slice(0, 5).map((skill, index) => (
+                    {job.skills.slice(0, 5).map((skill, index) => (
                       <Badge key={index} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>
                     ))}
-                    {job.summary.skills.length > 5 && (
+                    {job.skills.length > 5 && (
                       <Badge variant="outline" className="text-xs">
-                        +{job.summary.skills.length - 5} more
+                        +{job.skills.length - 5} more
                       </Badge>
                     )}
                   </div>
@@ -308,40 +337,54 @@ const JobDescriptions = () => {
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="title">Job Title</Label>
+                <Label htmlFor="title">Job Title*</Label>
                 <Input
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Frontend Developer"
+                  required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="company">Company</Label>
+                <Label htmlFor="company">Company*</Label>
                 <Input
                   id="company"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   placeholder="e.g. TechCorp"
+                  required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="location">Location</Label>
+                <Label htmlFor="location">Location*</Label>
                 <Input
                   id="location"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="e.g. Remote, New York, NY"
+                  required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="skills">Required Skills*</Label>
+                <MultiSelect
+                  options={SKILLS_OPTIONS}
+                  selected={skills}
+                  onChange={setSkills}
+                  placeholder="Select required skills..."
+                  className="w-full"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description*</Label>
                 <Textarea
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Enter the full job description with responsibilities and requirements..."
                   className="min-h-[150px]"
+                  required
                 />
               </div>
             </div>

@@ -75,7 +75,9 @@ const Candidates = () => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-
+  const getResumeForCandidate = (candidateId: string): Resume | undefined => {
+    return resumes.find(r => r.candidateId === candidateId);
+  };
   useEffect(() => {
     fetchData();
   }, []);
@@ -153,6 +155,28 @@ const Candidates = () => {
       setIsSubmitting(false);
     }
   };
+  const submitMatch = async () => {
+    if (!selectedCandidate || !selectedJob) return;
+
+    try {
+      setIsSubmitting(true);
+      const result = await matchingService.matchCandidateToJob(selectedCandidate.id, selectedJob);
+      setMatchResult(result);
+      toast({
+        title: 'Match Successful',
+        description: `Score: ${result.matchScore.toFixed(2)}%`
+      });
+    } catch (error) {
+      console.error('Error matching candidate:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Match Failed',
+        description: 'Could not fetch match score.'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -170,21 +194,25 @@ const Candidates = () => {
       });
       return;
     }
-
+  
     try {
       setIsSubmitting(true);
+      
+      // Create the candidate with required fields
       const newCandidate = await candidateService.createCandidate({
         name,
         email,
         phone,
-        resumeId: '', // Will be updated after resume upload
+        resumeId: '', // Initialize with empty string
+        skills: [], // Add empty array for skills if required
+        status: 'new' // Set default status
       });
       
       setCandidates([newCandidate, ...candidates]);
       setIsAddDialogOpen(false);
       
       if (resumeFile) {
-        // If there's a resume file, upload it
+        // Upload resume and update the candidate
         await uploadResumeForCandidate(resumeFile, newCandidate.id);
       }
       
@@ -230,82 +258,34 @@ const Candidates = () => {
       setIsSubmitting(false);
     }
   };
-
   const uploadResumeForCandidate = async (file: File, candidateId: string) => {
-    const resume = await resumeService.uploadResume(file, candidateId);
-    
-    // Update the resumes list
-    setResumes([resume, ...resumes]);
-    
-    // Update the candidate's resumeId
-    const updatedCandidate = await candidateService.updateCandidate(candidateId, {
-      resumeId: resume.id
-    });
-    
-    // Update the candidates list
-    setCandidates(candidates.map(c => 
-      c.id === candidateId ? updatedCandidate : c
-    ));
-    
-    toast({
-      title: 'Resume Uploaded',
-      description: 'The resume is being processed by our AI.'
-    });
-  };
-
-  const getResumeForCandidate = (candidateId: string) => {
-    return resumes.find(r => r.candidateId === candidateId);
-  };
-
-  const submitMatch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCandidate || !selectedJob) {
-      toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Please select a job description.'
-      });
-      return;
-    }
-
-    const resume = getResumeForCandidate(selectedCandidate.id);
-    if (!resume || resume.status !== 'processed') {
-      toast({
-        variant: 'destructive',
-        title: 'Resume Not Processed',
-        description: 'Please wait for the resume to be processed before matching.'
-      });
-      return;
-    }
-
     try {
-      setIsSubmitting(true);
-      const result = await matchingService.matchCandidateWithJob(
-        selectedCandidate.id,
-        selectedJob
-      );
-      setMatchResult(result);
+      const resume = await resumeService.uploadResume(file, candidateId);
       
-      // Update the candidate with the new match score
-      setCandidates(candidates.map(c => 
-        c.id === selectedCandidate.id 
-          ? { ...c, matchScore: result.matchScore } 
-          : c
-      ));
-      
-      toast({
-        title: 'Match Completed',
-        description: `Match score: ${result.matchScore}%`
+      // Update candidate with resumeId
+      const updatedCandidate = await candidateService.updateCandidate(candidateId, {
+        resumeId: resume.id
       });
+  
+      // Update state
+      setResumes(prev => [resume, ...prev]);
+      setCandidates(prev => prev.map(c => 
+        c.id === candidateId ? updatedCandidate : c
+      ));
+  
+      toast({
+        title: 'Resume Uploaded',
+        description: 'The resume was successfully uploaded and is being processed.'
+      });
+  
     } catch (error) {
-      console.error('Error matching candidate:', error);
+      console.error('Error in uploadResumeForCandidate:', error);
       toast({
         variant: 'destructive',
-        title: 'Error matching candidate',
-        description: 'Please try again later.'
+        title: 'Upload Failed',
+        description: error instanceof Error ? error.message : 'Failed to upload resume'
       });
-    } finally {
-      setIsSubmitting(false);
+      throw error; // Re-throw if needed for further handling
     }
   };
 
